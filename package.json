@@ -1,0 +1,28 @@
+{
+  "name": "vibespot-telegram-bot",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Small Telegram ops bot for Vibespot: /deployments (live Vercel status) and /random-vibe.",
+  "license": "UNLICENSED",
+  "main": "dist/index.js",
+  "scripts": {
+    "dev": "tsx watch src/index.ts",
+    "start:dev": "tsx src/index.ts",
+    "build": "tsc -p tsconfig.json",
+    "prestart": "npm run build",
+    "start": "node dist/index.js",
+    "typecheck": "tsc --noEmit"
+  },
+  "engines": {
+    "node": ">=18.17"
+  },
+  "dependencies": {
+    "dotenv": "^16.4.7",
+    "grammy": "^1.30.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.0",
+    "tsx": "^4.19.2",
+    "typescript": "^5.7.2"
+  }
+}
