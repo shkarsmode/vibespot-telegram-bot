@@ -31,6 +31,7 @@ Copy `.env.example` to `.env` and fill it in. **Never commit `.env`.**
 | `TELEGRAM_BOT_TOKEN` | yes | Bot token from BotFather. |
 | `VERCEL_TOKEN` | yes | Vercel API token (scoped to the team). |
 | `VERCEL_TEAM_ID` | yes | Vercel team id that owns the projects (`team_…`). |
+| `TELEGRAM_WEBHOOK_SECRET` | webhook only | Random secret Telegram echoes on every webhook call (Vercel deployment). Not needed for local polling. |
 | `ALLOWED_USER_IDS` | no | Comma-separated Telegram numeric user ids allowed to use the bot. Empty = everyone (fine for local testing). |
 
 ## Install
@@ -64,6 +65,26 @@ npm run typecheck
 The bot uses **long polling**, so no public URL or webhook is needed — it works
 from any machine with outbound internet access.
 
+## Deploy to Vercel (always-on, webhook)
+
+Vercel is serverless and cannot keep a long-polling process alive, so the
+deployment runs the bot in **webhook** mode via the `api/bot.ts` serverless
+function (`src/index.ts` long polling is only for local development).
+
+1. Set the four env vars in the Vercel project (Settings → Environment
+   Variables): `TELEGRAM_BOT_TOKEN`, `VERCEL_TOKEN`, `VERCEL_TEAM_ID`,
+   `TELEGRAM_WEBHOOK_SECRET`.
+2. Deploy. The webhook endpoint is `https://<project>.vercel.app/api/bot`
+   (a `GET` there returns a health-check string).
+3. Register the webhook with Telegram (once):
+
+   ```bash
+   curl "https://api.telegram.org/bot<TOKEN>/setWebhook?url=https://<project>.vercel.app/api/bot&secret_token=<TELEGRAM_WEBHOOK_SECRET>"
+   ```
+
+The bot is then always-on — no local process required. Switching back to local
+polling later just needs `deleteWebhook` and `npm run start:dev`.
+
 ## Security
 
 - All secrets live in `.env` (git-ignored). Nothing secret is hardcoded.
@@ -78,11 +99,14 @@ from any machine with outbound internet access.
 
 ```
 src/
-  index.ts              # bootstrap: config, bot, command wiring, error handling
+  index.ts              # local entry: long-polling launcher
+  bot.ts                # shared bot factory (commands + handlers)
   config.ts             # env loading/validation + project registry
   logger.ts             # tiny logger with secret redaction
   format.ts             # HTML escaping, time-ago, short SHA, URL helpers
   vercel.ts             # Vercel API client + deployment normalization
   commands/
     deployments.ts      # builds the /deployments report
+api/
+  bot.ts                # Vercel serverless webhook endpoint (/api/bot)
 ```

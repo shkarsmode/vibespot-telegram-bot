@@ -24,6 +24,8 @@ export interface AppConfig {
   telegramBotToken: string;
   vercelToken: string;
   vercelTeamId: string;
+  /** Secret token Telegram echoes on every webhook call (Vercel deployment). */
+  telegramWebhookSecret?: string;
   /** Empty = everyone allowed. */
   allowedUserIds: number[];
   projects: ProjectConfig[];
@@ -88,6 +90,7 @@ export function loadConfig(): AppConfig {
     telegramBotToken: required('TELEGRAM_BOT_TOKEN'),
     vercelToken: required('VERCEL_TOKEN'),
     vercelTeamId: required('VERCEL_TEAM_ID'),
+    telegramWebhookSecret: process.env.TELEGRAM_WEBHOOK_SECRET?.trim() || undefined,
     allowedUserIds: parseAllowedUserIds(process.env.ALLOWED_USER_IDS),
     projects: PROJECTS,
   };

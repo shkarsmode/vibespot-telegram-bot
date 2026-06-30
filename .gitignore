@@ -9,6 +9,9 @@ node_modules/
 # Build output
 dist/
 
+# Vercel CLI
+.vercel/
+
 # Logs
 *.log
 npm-debug.log*
