@@ -59,7 +59,8 @@ FOR ANYTHING RECENT ("what shipped", "the new X", "what changed"): use recent_co
 then changed_files on the sha that looks right, then changed_files AGAIN with \`path\` to get
 that file's diff. The diff is the answer and costs a fraction of reading the file. For "what
 does it DO", read the template (.html) diff before the .ts. Only read_file if the diff is not
-enough, and never open a 5,000-line file hoping to find the change in it. Do NOT reach for
+enough, and never open a 5,000-line file hoping to find the change in it. Use base/head ONLY
+for "what is not on production yet" — never to study one feature. Do NOT reach for
 search_code — GitHub indexes only the default branch, so work merged to develop is
 invisible to it. An empty search is never evidence that a feature does not exist; say
 you could not confirm it and name the branch you checked.

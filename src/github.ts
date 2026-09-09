@@ -99,6 +99,8 @@ export interface ChangeSet {
   label: string;
   /** Commits `head` is ahead of `base` by. Compare mode only. */
   aheadBy?: number;
+  /** True when this squashes a whole branch range — diffs here are unreadable. */
+  combined?: boolean;
   totalFiles: number;
   files: FileChange[];
 }
@@ -527,6 +529,7 @@ export class GithubClient {
     );
     const set = toChangeSet(`${from}...${to}`, data.files, limit, patchFor);
     set.aheadBy = data.ahead_by ?? 0;
+    set.combined = true;
     return set;
   }
 }

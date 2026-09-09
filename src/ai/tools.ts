@@ -132,7 +132,7 @@ export function buildToolSchemas(github: GithubClient): ToolSchema[] {
       function: {
         name: 'changed_files',
         description:
-          'What a change touched. Pass `commit` (a sha from recent_commits) for the files that commit changed — for anything recent this is the ONLY reliable route, because search_code cannot see work that has not reached the default branch. Pass `base` + `head` (e.g. base master-github, head develop) to see what is not on production yet. Then pass `path` as well to get the ACTUAL DIFF for that one file — do this instead of read_file when you want to know what a change does; the diff is the new code, and it is far smaller than the file.',
+          'What a change touched. TO LEARN WHAT A FEATURE DOES: recent_commits -> pick the commit whose message names it -> changed_files with that `commit` + `path` to read its diff. Never use `base`/`head` for that — a branch range merges dozens of commits into one diff too big to read. Pass `commit` (a sha from recent_commits) for the files that commit changed — for anything recent this is the ONLY reliable route, because search_code cannot see work that has not reached the default branch. Pass `base` + `head` (e.g. base master-github, head develop) to see what is not on production yet. Then pass `path` as well to get the ACTUAL DIFF for that one file — do this instead of read_file when you want to know what a change does; the diff is the new code, and it is far smaller than the file.',
         parameters: {
           type: 'object',
           properties: {
@@ -295,6 +295,17 @@ async function runTool(
       if (wantPatch) {
         const file = set.files[0];
         if (!file) return `"${wantPatch}" is not among the files changed by ${set.label}.`;
+        // A branch range squashes dozens of commits into one diff. Truncating it
+        // yields a confident answer drawn from whichever change happened to come
+        // first in the file — so refuse, and name the route that works.
+        if (set.combined && file.patch && file.patch.includes('[diff truncated')) {
+          return (
+            `The diff of ${file.path} across ${set.label} spans ${set.aheadBy} commits and is far ` +
+            `too large to read. Do NOT use a branch range to learn what one feature does. ` +
+            `Call recent_commits, pick the commit whose message names the feature, then call ` +
+            `changed_files with that commit AND this path.`
+          );
+        }
         if (!file.patch) return `${file.path} changed in ${set.label}, but GitHub returned no diff for it (usually too large or binary).`;
         return `${repo} — diff of ${file.path} in ${set.label} (+${file.additions} -${file.deletions}):\n${file.patch}`;
       }
