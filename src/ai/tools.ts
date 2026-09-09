@@ -130,6 +130,26 @@ export function buildToolSchemas(github: GithubClient): ToolSchema[] {
     {
       type: 'function',
       function: {
+        name: 'changed_files',
+        description:
+          'Which files a change touched. Pass `commit` (a sha from recent_commits) to see what that commit changed — for anything recent this is the ONLY reliable route, because search_code cannot see work that has not reached the default branch. Pass `base` + `head` instead (e.g. base master-github, head develop) to see what is not on production yet.',
+        parameters: {
+          type: 'object',
+          properties: {
+            repo: repoParam,
+            commit: { type: 'string', description: 'Commit sha from recent_commits.' },
+            base: { ...refParam, description: 'Compare mode: the ref to compare FROM.' },
+            head: { ...refParam, description: 'Compare mode: the ref to compare TO.' },
+            limit: { type: 'integer', minimum: 1, maximum: 60, default: 40 },
+          },
+          required: ['repo'],
+          additionalProperties: false,
+        },
+      },
+    },
+    {
+      type: 'function',
+      function: {
         name: 'get_deployments',
         description:
           'Current production deployment status for Landing, Web Client and API/AI: state, branch, commit, age and failure reason.',
@@ -251,11 +271,47 @@ async function runTool(
       return `${slice.repo}@${slice.branch} ${slice.path} (lines ${slice.startLine}-${slice.endLine} of ${slice.totalLines})\n${numbered}${tail}`;
     }
 
+    case 'changed_files': {
+      const limit = typeof args.limit === 'number' ? args.limit : 40;
+      const commit = typeof args.commit === 'string' ? args.commit.trim() : '';
+      const base = typeof args.base === 'string' ? args.base : '';
+      const head = typeof args.head === 'string' ? args.head : '';
+
+      let set;
+      if (commit) {
+        set = await ctx.github.commitChanges(repo, commit, limit);
+      } else if (base && head) {
+        set = await ctx.github.compareRefs(repo, base, head, limit);
+      } else {
+        return 'ERROR: pass either `commit`, or both `base` and `head`.';
+      }
+
+      if (!set.totalFiles) return `${repo} — ${set.label} touched no readable files.`;
+      const ahead =
+        set.aheadBy !== undefined ? ` — ${set.aheadBy} commit${set.aheadBy === 1 ? '' : 's'} ahead` : '';
+      const rows = set.files
+        .map((f) => `${f.status[0].toUpperCase()} ${f.path} (+${f.additions} -${f.deletions})`)
+        .join('\n');
+      const more =
+        set.totalFiles > set.files.length ? `\n… ${set.totalFiles - set.files.length} more files.` : '';
+      return `${repo} — ${set.label}${ahead}, ${set.totalFiles} files:\n${rows}${more}`;
+    }
+
     case 'search_code': {
       const query = typeof args.query === 'string' ? args.query : '';
       const limit = typeof args.limit === 'number' ? args.limit : 8;
       const hits = await ctx.github.searchCode(repo, query, limit);
-      if (!hits.length) return `No matches for "${query}" in ${repo} (default branch only).`;
+      if (!hits.length) {
+        // The model read the old wording as proof of absence and told the user
+        // the feature did not exist — while it sat on develop, 27 commits ahead
+        // of the only branch GitHub indexes.
+        return (
+          `No matches for "${query}" in ${repo}. NOTE: GitHub only indexes the default branch, ` +
+          `so this proves NOTHING about develop — anything merged there but not yet shipped to ` +
+          `production is invisible here. Do not conclude the feature is missing. Use ` +
+          `recent_commits + changed_files, or list_files, to check the branch you actually care about.`
+        );
+      }
       return `${repo} — matches for "${query}" (default branch; confirm on the branch you need):\n${hits
         .map((h) => `${h.path}${h.fragments.length ? `\n    ${h.fragments.join('\n    ')}` : ''}`)
         .join('\n')}`;

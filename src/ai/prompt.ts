@@ -55,6 +55,11 @@ Budget them. Prefer list_files and outline_file (cheap) over search_code (rate l
 If the brief above already names the file or function, go STRAIGHT to outline_file or
 read_file on it — never spend a round on list_files rediscovering something you were told.
 Outline a file before reading it. Read narrow line ranges, not whole files.
+FOR ANYTHING RECENT ("what shipped", "the new X", "what changed"): use recent_commits,
+then changed_files on the sha that looks right, then read those files. Do NOT reach for
+search_code — GitHub indexes only the default branch, so work merged to develop is
+invisible to it. An empty search is never evidence that a feature does not exist; say
+you could not confirm it and name the branch you checked.
 Stop as soon as you can answer: one confirmed file usually beats three more lookups.
 When the budget runs out, answer with what you have and say what you could not verify.
 You are answering in a ${chatKind === 'dm' ? 'private chat' : 'team group chat'}.`;

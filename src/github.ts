@@ -77,6 +77,23 @@ export interface CodeHit {
   fragments: string[];
 }
 
+export interface FileChange {
+  path: string;
+  /** added | modified | removed | renamed */
+  status: string;
+  additions: number;
+  deletions: number;
+}
+
+export interface ChangeSet {
+  /** What was compared, for the result header. */
+  label: string;
+  /** Commits `head` is ahead of `base` by. Compare mode only. */
+  aheadBy?: number;
+  totalFiles: number;
+  files: FileChange[];
+}
+
 export interface CommitInfo {
   sha: string;
   message: string;
@@ -459,4 +476,59 @@ export class GithubClient {
       date: c.commit?.author?.date ?? '',
     }));
   }
+
+  /**
+   * Files touched by one commit.
+   *
+   * This is what makes "what did we just ship?" answerable. GitHub's code
+   * search only indexes each repo's default branch, so a feature merged to
+   * `develop` is invisible to `searchCode` until it reaches production: the
+   * search comes back empty and the honest-looking conclusion is "that feature
+   * does not exist". Walking commits to their files avoids the index entirely.
+   */
+  async commitChanges(repoKey: string, sha: string, limit = 40): Promise<ChangeSet> {
+    const repo = this.resolveRepo(repoKey);
+    if (!/^[0-9a-f]{7,40}$/i.test(sha)) {
+      throw new GithubApiError('bad_request', `"${sha}" is not a commit sha.`);
+    }
+    const data = await this.request<{ files?: RawFile[] }>(
+      `/repos/${repo.owner}/${repo.name}/commits/${sha}`,
+    );
+    return toChangeSet(`commit ${sha.slice(0, 7)}`, data.files, limit);
+  }
+
+  /** What differs between two refs — e.g. what is on develop but not production. */
+  async compareRefs(repoKey: string, base: string, head: string, limit = 60): Promise<ChangeSet> {
+    const repo = this.resolveRepo(repoKey);
+    const from = this.resolveBranch(repo, base);
+    const to = this.resolveBranch(repo, head);
+    const data = await this.request<{ ahead_by?: number; files?: RawFile[] }>(
+      `/repos/${repo.owner}/${repo.name}/compare/${encodeURIComponent(from)}...${encodeURIComponent(to)}`,
+    );
+    const set = toChangeSet(`${from}...${to}`, data.files, limit);
+    set.aheadBy = data.ahead_by ?? 0;
+    return set;
+  }
+}
+
+interface RawFile {
+  filename?: string;
+  status?: string;
+  additions?: number;
+  deletions?: number;
+}
+
+/** Shared shaping for both change views, with the path denylist applied. */
+function toChangeSet(label: string, raw: RawFile[] | undefined, limit: number): ChangeSet {
+  const all = (raw ?? []).filter((f) => f.filename && !deniedPathReason(f.filename));
+  return {
+    label,
+    totalFiles: all.length,
+    files: all.slice(0, limit).map((f) => ({
+      path: f.filename as string,
+      status: f.status ?? 'modified',
+      additions: f.additions ?? 0,
+      deletions: f.deletions ?? 0,
+    })),
+  };
 }
