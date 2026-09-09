@@ -24,6 +24,7 @@ export interface RepoSource {
     branch: string | undefined,
     prefix?: string,
     limit?: number,
+    match?: string,
   ): Promise<{ entries: TreeEntry[]; total: number }>;
   readFile(
     repoKey: string,
@@ -81,8 +82,9 @@ export class Sources implements RepoSource {
     branch: string | undefined,
     prefix?: string,
     limit?: number,
+    match?: string,
   ): Promise<{ entries: TreeEntry[]; total: number }> {
-    return this.route(repoKey).listTree(repoKey, branch, prefix, limit);
+    return this.route(repoKey).listTree(repoKey, branch, prefix, limit, match);
   }
 
   readFile(

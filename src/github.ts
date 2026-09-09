@@ -10,6 +10,7 @@ import {
   MAX_FILE_CHARS,
   MAX_FILE_LINES,
   outlineOf,
+  pathMatchesQuery,
   PathDeniedError,
   RepoApiError,
   scrubSecrets,
@@ -199,6 +200,7 @@ export class GithubClient {
     branch: string | undefined,
     prefix = '',
     limit = MAX_TREE_ENTRIES,
+    match?: string,
   ): Promise<{ entries: TreeEntry[]; total: number }> {
     const all = await this.getTree(repoKey, branch);
     const normalized = prefix.replace(/^\/+|\/+$/g, '');
@@ -206,7 +208,8 @@ export class GithubClient {
       .filter((e) => !deniedPathReason(e.path))
       .filter((e) =>
         normalized ? e.path === normalized || e.path.startsWith(`${normalized}/`) : true,
-      );
+      )
+      .filter((e) => (match ? pathMatchesQuery(e.path, match) : true));
     return { entries: matches.slice(0, Math.min(limit, MAX_TREE_ENTRIES)), total: matches.length };
   }
 

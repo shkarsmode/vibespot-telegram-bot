@@ -9,6 +9,7 @@ import {
   MAX_FILE_CHARS,
   MAX_FILE_LINES,
   outlineOf,
+  pathMatchesQuery,
   PathDeniedError,
   RepoApiError,
   scrubSecrets,
@@ -24,10 +25,10 @@ import type { Store } from './store';
  * those live in repo-read.ts rather than in either client.
  *
  * Two differences are real and are surfaced rather than papered over: Azure
- * exposes no per-file patch (only which paths a commit touched), and its code
- * search needs a separate service, so `searchCode` says so instead of quietly
- * returning nothing — an empty search result is exactly what once had Viby
- * declaring a shipped feature missing.
+ * exposes no per-file patch (only which paths a commit touched), and it has no
+ * content index, so `searchCode` matches file PATHS out of the cached tree and
+ * the tool result says so. Both matter because a silent empty result is exactly
+ * what once had Viby declaring a shipped feature missing.
  */
 
 const API_VERSION = '7.1';
@@ -140,10 +141,13 @@ export class AzureClient {
     branch: string | undefined,
     prefix = '',
     limit = MAX_TREE_ENTRIES,
+    match?: string,
   ): Promise<{ entries: TreeEntry[]; total: number }> {
     const all = await this.getTree(repoKey, branch);
     const clean = prefix.replace(/^\/+/, '');
-    const matched = all.filter((e) => (clean ? e.path.startsWith(clean) : true));
+    const matched = all
+      .filter((e) => (clean ? e.path.startsWith(clean) : true))
+      .filter((e) => (match ? pathMatchesQuery(e.path, match) : true));
     return {
       entries: matched.slice(0, Math.min(limit, MAX_TREE_ENTRIES)),
       total: matched.length,
@@ -217,14 +221,20 @@ export class AzureClient {
     return { repo: repo.key, branch: ref, path: clean, totalLines, outline: scrubSecrets(outline) };
   }
 
-  /** Azure code search is a separate service; say so rather than return nothing. */
-  async searchCode(repoKey: string, _query: string, _limit = 15): Promise<CodeHit[]> {
-    const repo = this.resolveRepo(repoKey);
-    throw new RepoApiError(
-      'bad_request',
-      `Full-text search is not available for ${repo.key} (Azure DevOps). ` +
-        'Use list_files to locate the file, then outline_file or read_file.',
-    );
+  /**
+   * Azure has no content search, so this searches PATHS instead — free, because
+   * the tree is already cached. Refusing outright was worse: the model walked
+   * directories by hand, and once spent its whole budget finding a file it then
+   * had nothing left to read. The tool result says plainly that these are path
+   * matches, so a miss is never read as "no such code".
+   */
+  async searchCode(repoKey: string, query: string, limit = 15): Promise<CodeHit[]> {
+    const branch = this.resolveBranch(this.resolveRepo(repoKey));
+    const all = await this.getTree(repoKey, branch);
+    return all
+      .filter((e) => e.type === 'blob' && pathMatchesQuery(e.path, query))
+      .slice(0, limit)
+      .map((e) => ({ path: e.path, fragments: [] }));
   }
 
   // ---- history ------------------------------------------------------------

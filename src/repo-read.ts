@@ -31,6 +31,23 @@ const MARKDOWN_PATTERNS: RegExp[] = [
   /^\s{0,3}\|.*\|\s*$/,
 ];
 
+/**
+ * Does this path match a free-text query?
+ *
+ * The file tree is already cached in full, so matching against it costs nothing
+ * — which matters most where there is no code search at all. Asked which
+ * endpoint the mobile app posts a vibe to, Viby spent ten tool calls walking
+ * directories to find `vibe-create-api.ts` and then had no budget left to open
+ * it. Every word has to appear somewhere in the path, so "vibe create api"
+ * finds that file while "create" alone does not bury the answer in matches.
+ */
+export function pathMatchesQuery(path: string, query: string): boolean {
+  const words = query.toLowerCase().split(/[\s/._-]+/).filter(Boolean);
+  if (!words.length) return true;
+  const haystack = path.toLowerCase();
+  return words.every((word) => haystack.includes(word));
+}
+
 /** Declaration (or heading) lines of a file, numbered and capped. */
 export function outlineOf(text: string, path: string): { totalLines: number; outline: string } {
   const lines = text.split('\n');

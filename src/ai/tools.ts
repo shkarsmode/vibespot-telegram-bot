@@ -46,7 +46,7 @@ export function buildToolSchemas(sources: Sources): ToolSchema[] {
       function: {
         name: 'list_files',
         description:
-          'List file paths in a repo under a path prefix. Free and fast (served from a cached git tree) — ALWAYS prefer this over search_code to find where something lives. Secret, binary and lockfile paths are excluded.',
+          'Find file paths in a repo. Free and fast — served from a cached tree, so it costs no API call. Pass `match` with words from the filename you want ("vibe create api") to locate a file in ONE call instead of walking directories; every word must appear in the path. `path_prefix` narrows to a directory. ALWAYS start here rather than guessing paths. Secret, binary and lockfile paths are excluded.',
         parameters: {
           type: 'object',
           properties: {
@@ -55,6 +55,11 @@ export function buildToolSchemas(sources: Sources): ToolSchema[] {
             path_prefix: {
               type: 'string',
               description: 'e.g. "src/app/shared/services" or "docs". Omit for the repo root.',
+            },
+            match: {
+              type: 'string',
+              description:
+                'Words that must all appear in the path, e.g. "vibe create api" or "auth guard". This is the cheapest way to find a file — use it before browsing directories.',
             },
             limit: { type: 'integer', minimum: 1, maximum: 200, default: 100 },
           },
@@ -236,8 +241,13 @@ async function runTool(
     case 'list_files': {
       const prefix = typeof args.path_prefix === 'string' ? args.path_prefix : '';
       const limit = typeof args.limit === 'number' ? args.limit : 100;
-      const { entries, total } = await ctx.sources.listTree(repo, ref, prefix, limit);
-      if (!entries.length) return `No files under "${prefix || '/'}" in ${repo}.`;
+      const match = typeof args.match === 'string' ? args.match.trim() : '';
+      const { entries, total } = await ctx.sources.listTree(repo, ref, prefix, limit, match || undefined);
+      if (!entries.length) {
+        return match
+          ? `No paths in ${repo} match "${match}". Try fewer or different words — this matches PATHS, not file contents.`
+          : `No files under "${prefix || '/'}" in ${repo}.`;
+      }
       const shown = entries
         .filter((e) => e.type === 'blob')
         .map((e) => `${e.path}${e.size ? ` (${Math.round(e.size / 1024)}kb)` : ''}`)
@@ -320,7 +330,18 @@ async function runTool(
     case 'search_code': {
       const query = typeof args.query === 'string' ? args.query : '';
       const limit = typeof args.limit === 'number' ? args.limit : 8;
+      const isAzure = ctx.sources.listRepos().find((r) => r.key === repo)?.provider === 'azure';
       const hits = await ctx.sources.searchCode(repo, query, limit);
+      if (isAzure) {
+        // Azure has no content index, so this matched paths. Saying so keeps a
+        // miss from reading as "that code does not exist".
+        if (!hits.length) {
+          return `No PATHS in ${repo} match "${query}". Azure DevOps has no full-text search, so this only matched file paths — it says nothing about file contents. Try list_files with different words, or read a likely file.`;
+        }
+        return `${repo} — file PATHS matching "${query}" (Azure has no content search; these are name matches, not content matches):\n${hits
+          .map((h) => h.path)
+          .join('\n')}`;
+      }
       if (!hits.length) {
         // The model read the old wording as proof of absence and told the user
         // the feature did not exist — while it sat on develop, 27 commits ahead
