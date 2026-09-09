@@ -3,6 +3,17 @@
   "buildCommand": "echo 'no build step — serverless functions only'",
   "outputDirectory": "public",
   "functions": {
-    "api/bot.ts": { "maxDuration": 120 }
-  }
+    "api/bot.ts": {
+      "maxDuration": 120
+    },
+    "api/cron.ts": {
+      "maxDuration": 60
+    }
+  },
+  "crons": [
+    {
+      "path": "/api/cron",
+      "schedule": "0 9 * * *"
+    }
+  ]
 }

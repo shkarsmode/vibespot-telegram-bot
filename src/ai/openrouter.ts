@@ -97,6 +97,26 @@ interface RawResponse {
 export class OpenRouterClient {
   constructor(private readonly apiKey: string) {}
 
+  /** Credit left on the key, in dollars. Null when OpenRouter will not say. */
+  async remainingCredit(): Promise<number | null> {
+    try {
+      const res = await fetch(`${API_BASE}/credits`, {
+        headers: { Authorization: `Bearer ${this.apiKey}` },
+        signal: AbortSignal.timeout(10_000),
+      });
+      if (!res.ok) return null;
+      const body = (await res.json()) as {
+        data?: { total_credits?: number; total_usage?: number };
+      };
+      const granted = body.data?.total_credits;
+      const used = body.data?.total_usage;
+      if (typeof granted !== 'number' || typeof used !== 'number') return null;
+      return granted - used;
+    } catch {
+      return null;
+    }
+  }
+
   async chat(options: ChatOptions): Promise<CompletionResult> {
     const messages = options.cacheSystemPrompt
       ? this.withCachedSystemPrompt(options.messages)

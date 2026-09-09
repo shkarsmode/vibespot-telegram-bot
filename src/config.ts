@@ -66,6 +66,12 @@ export interface AppConfig {
   groupEnabled: boolean;
   /** Azure DevOps PAT. Empty = the Azure repos are not registered at all. */
   azureToken: string;
+  /**
+   * The PAT's expiry date (YYYY-MM-DD). A token carries no expiry you can read
+   * back, and it dies quietly — the Azure repos just stop answering — so the
+   * date is written down here and the daily cron warns before it arrives.
+   */
+  azurePatExpires: string;
   githubRepos: RepoConfig[];
   /** Empty unless `azureToken` is set — Viby is never told about a repo it cannot open. */
   azureRepos: RepoConfig[];
@@ -213,6 +219,7 @@ export function loadConfig(): AppConfig {
   const azureRepos = azureToken ? AZURE_REPOS : [];
   return {
     azureToken,
+    azurePatExpires: process.env.AZURE_PAT_EXPIRES?.trim() || '2026-12-08',
     githubRepos: GITHUB_REPOS,
     azureRepos,
     repos: [...GITHUB_REPOS, ...azureRepos],
