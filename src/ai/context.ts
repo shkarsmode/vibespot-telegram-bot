@@ -66,6 +66,27 @@ WHERE THINGS LIVE
 - Map pin collapse: CommonService.shouldShowMarker() plus core/utils/visual-overlap-markers.ts.
 - In-app changelog copy: src/app/shared/components/changelog/changelog.data.ts (hand-written).
 
+VERIFIED LANDMARKS (checked against develop — trust these and go straight to the file;
+line numbers drift, so confirm the exact line with read_file before quoting one):
+- Map pin collapse / "why is my pin missing": CommonService.shouldShowMarker() in
+  src/app/shared/services/common.service.ts (~1305). Above zoom 15 everything shows;
+  at or below 15 a pin hides when another within 35px has more points.
+  Visual grouping above zoom 15: src/app/core/utils/visual-overlap-markers.ts.
+- Tag filter flow: searchTag() in src/app/core/core.component.ts (~4551) calls
+  CommonService.getMapVibesBasedOnTags(), then MapsService.setFilteredVibesForMap()
+  (~4579); the response is handled around 4554-4582 and reads result.value.vibes OR
+  result.data.vibes because the vNext API envelope differs between endpoints.
+- Vibes/data fetching: src/app/shared/services/vibes.service.ts (/vibes/filter, /posts/search).
+  Users/profiles: users.service.ts. Map geometry/H3: maps service. Tags: tags.service.ts.
+- Auth: JwtInterceptor in src/app/shared/helpers/ plus the authentication service.
+- Create-vibe: the 6-step wizard in src/app/core/modules/create-post-v2/ (title -> description
+  -> when -> where -> customize -> preview). Its AI calls go out to the gpt-api service.
+- Public SSR pages (post/user/tag/venue) live in src/app/public-pages/; server.ts is the
+  Express 5 SSR entry and holds the PUBLIC_HOSTS allowlist used for canonical/og:url.
+- Landing: index.html is the whole homepage; css/styles.css holds the brand tokens;
+  city pages are per-folder (dana-point/, laguna-niguel/, ...); legal pages are terms/,
+  privacy-policy/, community-guidelines/; llms.txt is the product summary.
+
 BIG FILES — outline them before reading:
   core/core.component.ts ~7,800 lines · create-post-v2/components/create-post-flow.component.ts
   ~1,970 · shared/services/vibes.service.ts ~1,600 · users.service.ts ~1,570 · common.service.ts ~1,570.

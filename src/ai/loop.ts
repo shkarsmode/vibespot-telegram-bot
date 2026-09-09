@@ -40,12 +40,47 @@ export interface AgentInput {
   onProgress?: (note: string) => void;
 }
 
+/** Tool results older than this many rounds are trimmed to their header. */
+const KEEP_FULL_TOOL_RESULTS = 4;
+const TRIMMED_TOOL_RESULT_CHARS = 400;
+
 function addUsage(total: Usage, next: Usage): Usage {
   return {
     promptTokens: total.promptTokens + next.promptTokens,
     completionTokens: total.completionTokens + next.completionTokens,
     costUsd: total.costUsd + next.costUsd,
+    cachedTokens: total.cachedTokens + next.cachedTokens,
   };
+}
+
+/**
+ * Shrink the conversation before re-sending it.
+ *
+ * Every extra round re-sends every earlier tool result, so a six-round answer
+ * pays for the same 40k characters six times — that, not the model, is what
+ * makes a deep question expensive. Older results keep their first few hundred
+ * characters (which carry the `repo@branch path (lines a-b)` header, the part
+ * the model actually cites) and drop the body; the newest results stay intact
+ * because those are what it is reasoning about right now.
+ */
+function trimOldToolResults(messages: ChatMessage[]): ChatMessage[] {
+  const toolPositions = messages.reduce<number[]>((acc, message, index) => {
+    if (message.role === 'tool') acc.push(index);
+    return acc;
+  }, []);
+  if (toolPositions.length <= KEEP_FULL_TOOL_RESULTS) return messages;
+
+  const firstKept = toolPositions[toolPositions.length - KEEP_FULL_TOOL_RESULTS];
+  return messages.map((message, index) => {
+    if (message.role !== 'tool' || index >= firstKept) return message;
+    const content = message.content ?? '';
+    if (content.length <= TRIMMED_TOOL_RESULT_CHARS) return message;
+    const dropped = content.length - TRIMMED_TOOL_RESULT_CHARS;
+    return {
+      ...message,
+      content: `${content.slice(0, TRIMMED_TOOL_RESULT_CHARS)}\n[… ${dropped} chars trimmed to save context — call the tool again if you need the rest]`,
+    };
+  });
 }
 
 function describeCall(name: string, rawArguments: string): string {
@@ -60,7 +95,7 @@ function describeCall(name: string, rawArguments: string): string {
 
 export async function runAgent(input: AgentInput): Promise<AgentResult> {
   const messages = [...input.messages];
-  let usage: Usage = { promptTokens: 0, completionTokens: 0, costUsd: 0 };
+  let usage: Usage = { promptTokens: 0, completionTokens: 0, costUsd: 0, cachedTokens: 0 };
   const toolsUsed: string[] = [];
 
   for (let iteration = 0; iteration < input.profile.maxIterations; iteration++) {
@@ -71,7 +106,7 @@ export async function runAgent(input: AgentInput): Promise<AgentResult> {
 
     const result = await input.client.chat({
       model: input.model.id,
-      messages,
+      messages: trimOldToolResults(messages),
       tools: forceFinal ? undefined : input.tools,
       maxTokens: input.profile.maxAnswerTokens,
       reasoningEffort: input.model.supportsReasoning ? input.profile.reasoningEffort : undefined,
@@ -136,7 +171,7 @@ export async function runAgent(input: AgentInput): Promise<AgentResult> {
   });
   const final = await input.client.chat({
     model: input.model.id,
-    messages,
+    messages: trimOldToolResults(messages),
     maxTokens: input.profile.maxAnswerTokens,
     reasoningEffort: input.model.supportsReasoning ? input.profile.reasoningEffort : undefined,
     cacheSystemPrompt: true,

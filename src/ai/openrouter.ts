@@ -55,6 +55,8 @@ export interface Usage {
   completionTokens: number;
   /** OpenRouter reports the real charge; 0 when it is not returned. */
   costUsd: number;
+  /** Prompt tokens served from the provider's cache — the saving, when > 0. */
+  cachedTokens: number;
 }
 
 export interface CompletionResult {
@@ -83,7 +85,12 @@ interface RawResponse {
     message?: { content?: string | null; tool_calls?: ToolCall[] };
     finish_reason?: string;
   }[];
-  usage?: { prompt_tokens?: number; completion_tokens?: number; cost?: number };
+  usage?: {
+    prompt_tokens?: number;
+    completion_tokens?: number;
+    cost?: number;
+    prompt_tokens_details?: { cached_tokens?: number };
+  };
   error?: { message?: string };
 }
 
@@ -125,6 +132,7 @@ export class OpenRouterClient {
         promptTokens: data.usage?.prompt_tokens ?? 0,
         completionTokens: data.usage?.completion_tokens ?? 0,
         costUsd: data.usage?.cost ?? 0,
+        cachedTokens: data.usage?.prompt_tokens_details?.cached_tokens ?? 0,
       },
     };
   }

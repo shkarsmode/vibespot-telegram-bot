@@ -82,10 +82,12 @@ export const EFFORTS: Record<Effort, EffortProfile> = {
     key: 'medium',
     label: 'Medium · default',
     reasoningEffort: 'low',
-    maxIterations: 5,
-    defaultReadLines: 200,
-    maxReadLines: 400,
-    toolCharBudget: 60_000,
+    // 4 rounds keeps a typical answer near $0.02-0.03. Every extra round
+    // re-sends the whole conversation, so rounds cost far more than they look.
+    maxIterations: 4,
+    defaultReadLines: 180,
+    maxReadLines: 300,
+    toolCharBudget: 40_000,
     maxAnswerTokens: 1_300,
   },
   high: {

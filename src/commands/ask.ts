@@ -108,7 +108,7 @@ export async function buildAnswer(deps: AnswerDeps, input: AnswerInput): Promise
     await store.addMemory(input.chatId, fact);
     return {
       html: `📌 Got it — I'll remember that.\n\n<blockquote>${escapeHtml(fact)}</blockquote>\n\nUse /memory to see everything, /forget to drop one.`,
-      usage: { promptTokens: 0, completionTokens: 0, costUsd: 0 },
+      usage: { promptTokens: 0, completionTokens: 0, costUsd: 0, cachedTokens: 0 },
       free: true,
     };
   }
@@ -169,7 +169,9 @@ export async function buildAnswer(deps: AnswerDeps, input: AnswerInput): Promise
 
   logger.info(
     `Viby answered chat=${input.chatId} model=${model.key} effort=${profile.key} ` +
-      `tools=${run.toolsUsed.length} stop=${run.stopReason} tokens=${run.usage.promptTokens}/${run.usage.completionTokens}`,
+      `tools=${run.toolsUsed.length} stop=${run.stopReason} ` +
+      `tokens=${run.usage.promptTokens}/${run.usage.completionTokens} cached=${run.usage.cachedTokens} ` +
+      `cost=$${run.usage.costUsd.toFixed(4)}`,
   );
 
   const answer = run.text.trim() || 'I could not produce an answer for that. Try rephrasing?';
