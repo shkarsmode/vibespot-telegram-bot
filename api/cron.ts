@@ -93,6 +93,36 @@ async function collectWarnings(): Promise<Warnings> {
   return { team, maintainer };
 }
 
+export interface Delivery {
+  chatId: number;
+  body: string;
+}
+
+/** Who gets which warning. Pure, so the routing can be checked without Telegram. */
+export function planDeliveries(
+  warnings: Warnings,
+  routing: { allowedUserIds: number[]; allowedChatIds: number[]; groupEnabled: boolean },
+): Delivery[] {
+  const owner = routing.allowedUserIds[0];
+  // Team warnings go to every group Viby serves; with no group configured they
+  // fall back to the maintainer rather than going nowhere at all.
+  const teamChats =
+    routing.groupEnabled && routing.allowedChatIds.length
+      ? routing.allowedChatIds
+      : owner !== undefined
+        ? [owner]
+        : [];
+
+  const deliveries: Delivery[] = [];
+  if (warnings.team.length) {
+    for (const chatId of teamChats) deliveries.push({ chatId, body: warnings.team.join('\n\n') });
+  }
+  if (warnings.maintainer.length && owner !== undefined) {
+    deliveries.push({ chatId: owner, body: warnings.maintainer.join('\n\n') });
+  }
+  return deliveries;
+}
+
 export default async function handler(req: VercelRequest, res: VercelResponse): Promise<void> {
   // Vercel Cron signs its calls; without the secret set, anyone could poke this.
   const expected = process.env.CRON_SECRET?.trim();
@@ -108,23 +138,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse): 
       return;
     }
 
-    const owner = config.allowedUserIds[0];
-    // Team warnings go to every group Viby serves; with no group configured
-    // they fall back to the maintainer rather than going nowhere.
-    const teamChats =
-      config.groupEnabled && config.allowedChatIds.length
-        ? config.allowedChatIds
-        : owner !== undefined
-          ? [owner]
-          : [];
-
-    const deliveries: { chatId: number; body: string }[] = [];
-    if (team.length) {
-      for (const chatId of teamChats) deliveries.push({ chatId, body: team.join('\n\n') });
-    }
-    if (maintainer.length && owner !== undefined) {
-      deliveries.push({ chatId: owner, body: maintainer.join('\n\n') });
-    }
+    const deliveries = planDeliveries({ team, maintainer }, config);
 
     if (!deliveries.length) {
       logger.warn('Cron has warnings but no chat is configured to receive them');
