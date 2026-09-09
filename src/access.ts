@@ -16,6 +16,13 @@
 export interface AccessLists {
   allowedUserIds: number[];
   allowedChatIds: number[];
+  /**
+   * The phase gate (VIBY_GROUP_ENABLED). While false the bot is silent in every
+   * group, listed or not — commands included. It lives here rather than only in
+   * `detectTrigger` because a command like /ask spends money without ever
+   * reaching a trigger, so gating triggers alone left the flag half-honest.
+   */
+  groupEnabled: boolean;
 }
 
 export interface ChatIdentity {
@@ -48,6 +55,7 @@ export function decideAccess(identity: ChatIdentity, lists: AccessLists): Access
   if (identity.chatType === 'channel') return 'ignore';
 
   if (isGroupChat(identity.chatType)) {
+    if (!lists.groupEnabled) return 'ignore';
     if (lists.allowedChatIds.includes(identity.chatId)) return 'allow';
     // Unlisted group: open only while nothing at all is locked down.
     const fullyOpen = lists.allowedChatIds.length === 0 && lists.allowedUserIds.length === 0;

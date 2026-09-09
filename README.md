@@ -89,8 +89,12 @@ Two lists, checked by `src/access.ts` before any handler runs:
 | **In `ALLOWED_USER_IDS`** | full access | full access | silence |
 | **Anyone else** | refused, one line | may ask questions and run `/deployments`; cannot change model, effort or memory | silence |
 
-An unlisted group gets **no reply at all** — not even a refusal — so the bot can
-never spam a chat it was added to by mistake. Both lists empty = fully open;
+A group is served only when `VIBY_GROUP_ENABLED=true` **and** its id is listed —
+the phase gate is checked first, so adding an id while the flag is off changes
+nothing. Any group that fails either test gets **no reply at all**, not even a
+refusal, so the bot can never spam a chat it was added to by mistake.
+(A basic group promoted to a supergroup gets a new id and falls silent until the
+new one is listed.) Both lists empty = fully open;
 that is the local-development default and must not ship.
 
 `/whoami` is the one command that runs *before* the gate: it echoes the caller's

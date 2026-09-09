@@ -97,6 +97,7 @@ export function createBot(config: AppConfig): Bot {
   const lists: AccessLists = {
     allowedUserIds: config.allowedUserIds,
     allowedChatIds: config.allowedChatIds,
+    groupEnabled: config.groupEnabled,
   };
 
   const identify = (ctx: Context) => ({
