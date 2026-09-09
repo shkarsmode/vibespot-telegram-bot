@@ -46,8 +46,9 @@ community-guidelines. Contact: support@vibespot.com, partners@vibespot.com.`;
 export const CODE_MAP = `REPOS YOU CAN READ
 - webclient = shkarsmode/vibespot-webclient-public (PRIVATE). Angular 20.3 + TypeScript 5.8,
   zoneless change detection, SSR on Express 5, Mapbox GL. ~900 tracked files, ~125k lines.
-  Branches: develop (active work, default for your reads) and master-github (GitHub default
-  branch, feeds production; usually a bit BEHIND develop).
+  Branches: develop (the dev environment; the branch you read by default) and master-github
+  (GitHub default branch, feeds production). See HOW THE TEAM SHIPS for the merge direction —
+  it is not the usual one, so do not assume it.
 - landing = shkarsmode/vibespot-landing-v2. Static HTML/CSS/JS, no build step, no package.json.
   Branch: main. Homepage, city pages, legal pages, llms.txt.
 
@@ -102,11 +103,14 @@ DOC INDEX (read on demand): docs/architecture.md, project-structure.md, api-inte
   angular-upgrade.md, and the api-vnext-* / vnext-* migration set from March 2026.`;
 
 /** Tribal knowledge that is written down nowhere else. */
-export const OPS_FACTS = `HOW THE TEAM SHIPS
-- Work on master-github, then merge into develop with \`-X theirs\`, then push BOTH to the
-  \`github\` remote. master-github -> production env. develop -> dev env.
-- master-github usually TRAILS develop, so "what's on prod" is not "what's in develop".
-  Always say which branch your answer came from.
+export const OPS_FACTS = `HOW THE TEAM SHIPS — this flow is BACKWARDS from the usual one.
+Do NOT paraphrase it as "work on develop, then merge into master when shipping".
+- Commits land on master-github FIRST. master-github is then merged INTO develop with
+  \`git merge -X theirs\`, and BOTH branches are pushed to the \`github\` remote.
+  The direction is master-github -> develop. Never develop -> master-github.
+- Vercel deploys master-github -> production, develop -> dev/preview.
+- develop can still hold work that never went to prod, so "what's on prod" is not
+  "what's in develop". Always say which branch your answer came from.
 
 KNOWN NON-BUGS — do not diagnose these as regressions
 - Dev and prod hit DIFFERENT backends. The production database is near-empty, so an empty
