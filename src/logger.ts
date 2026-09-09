@@ -9,6 +9,10 @@
 const REDACTORS: RegExp[] = [
   /\b\d{6,}:[A-Za-z0-9_-]{30,}\b/g, // Telegram bot token
   /\bvcp_[A-Za-z0-9]{20,}\b/g, // Vercel token (new format)
+  /\bsk-or-v1-[A-Za-z0-9]{32,}\b/g, // OpenRouter API key
+  /\bgithub_pat_[A-Za-z0-9_]{20,}\b/g, // GitHub fine-grained PAT
+  /\bgh[pousr]_[A-Za-z0-9]{20,}\b/g, // GitHub classic token
+  /\bpk\.eyJ[A-Za-z0-9._-]{20,}\b/g, // Mapbox public token (lives in the webclient repo)
   /\bBearer\s+[A-Za-z0-9._~+/-]+=*/gi, // Authorization header value
 ];
 

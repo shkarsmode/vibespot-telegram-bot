@@ -20,7 +20,14 @@ async function main(): Promise<void> {
   }
 
   // Scrub the real token values from every future log line (defense in depth).
-  configureSecretRedaction([config.vercelToken, config.telegramBotToken]);
+  configureSecretRedaction([
+    config.vercelToken,
+    config.telegramBotToken,
+    config.telegramWebhookSecret,
+    config.openRouterApiKey,
+    config.githubToken,
+    config.redisToken,
+  ]);
 
   const bot = createBot(config);
 
