@@ -132,12 +132,17 @@ export function buildToolSchemas(github: GithubClient): ToolSchema[] {
       function: {
         name: 'changed_files',
         description:
-          'Which files a change touched. Pass `commit` (a sha from recent_commits) to see what that commit changed — for anything recent this is the ONLY reliable route, because search_code cannot see work that has not reached the default branch. Pass `base` + `head` instead (e.g. base master-github, head develop) to see what is not on production yet.',
+          'What a change touched. Pass `commit` (a sha from recent_commits) for the files that commit changed — for anything recent this is the ONLY reliable route, because search_code cannot see work that has not reached the default branch. Pass `base` + `head` (e.g. base master-github, head develop) to see what is not on production yet. Then pass `path` as well to get the ACTUAL DIFF for that one file — do this instead of read_file when you want to know what a change does; the diff is the new code, and it is far smaller than the file.',
         parameters: {
           type: 'object',
           properties: {
             repo: repoParam,
             commit: { type: 'string', description: 'Commit sha from recent_commits.' },
+            path: {
+              type: 'string',
+              description:
+                'A path from a previous changed_files result. Returns the diff for that file instead of the file list. For "what does this feature do", the template (.html) diff usually answers it better than the .ts.',
+            },
             base: { ...refParam, description: 'Compare mode: the ref to compare FROM.' },
             head: { ...refParam, description: 'Compare mode: the ref to compare TO.' },
             limit: { type: 'integer', minimum: 1, maximum: 60, default: 40 },
@@ -276,14 +281,22 @@ async function runTool(
       const commit = typeof args.commit === 'string' ? args.commit.trim() : '';
       const base = typeof args.base === 'string' ? args.base : '';
       const head = typeof args.head === 'string' ? args.head : '';
+      const wantPatch = typeof args.path === 'string' ? args.path.trim() : '';
 
       let set;
       if (commit) {
-        set = await ctx.github.commitChanges(repo, commit, limit);
+        set = await ctx.github.commitChanges(repo, commit, limit, wantPatch || undefined);
       } else if (base && head) {
-        set = await ctx.github.compareRefs(repo, base, head, limit);
+        set = await ctx.github.compareRefs(repo, base, head, limit, wantPatch || undefined);
       } else {
         return 'ERROR: pass either `commit`, or both `base` and `head`.';
+      }
+
+      if (wantPatch) {
+        const file = set.files[0];
+        if (!file) return `"${wantPatch}" is not among the files changed by ${set.label}.`;
+        if (!file.patch) return `${file.path} changed in ${set.label}, but GitHub returned no diff for it (usually too large or binary).`;
+        return `${repo} — diff of ${file.path} in ${set.label} (+${file.additions} -${file.deletions}):\n${file.patch}`;
       }
 
       if (!set.totalFiles) return `${repo} — ${set.label} touched no readable files.`;

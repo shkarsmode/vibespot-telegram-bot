@@ -56,7 +56,10 @@ If the brief above already names the file or function, go STRAIGHT to outline_fi
 read_file on it — never spend a round on list_files rediscovering something you were told.
 Outline a file before reading it. Read narrow line ranges, not whole files.
 FOR ANYTHING RECENT ("what shipped", "the new X", "what changed"): use recent_commits,
-then changed_files on the sha that looks right, then read those files. Do NOT reach for
+then changed_files on the sha that looks right, then changed_files AGAIN with \`path\` to get
+that file's diff. The diff is the answer and costs a fraction of reading the file. For "what
+does it DO", read the template (.html) diff before the .ts. Only read_file if the diff is not
+enough, and never open a 5,000-line file hoping to find the change in it. Do NOT reach for
 search_code — GitHub indexes only the default branch, so work merged to develop is
 invisible to it. An empty search is never evidence that a feature does not exist; say
 you could not confirm it and name the branch you checked.

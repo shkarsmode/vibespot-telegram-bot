@@ -17,6 +17,13 @@ import type { Store } from './store';
 const API_BASE = 'https://api.github.com';
 const REQUEST_TIMEOUT_MS = 15_000;
 const TREE_CACHE_TTL_SECONDS = 3_600;
+/**
+ * A single file's diff. Sized from a real case: the commit that added the vibe
+ * context menu changed its template by 9.8k characters, and the answer to "what
+ * does it do" was the list of menu items near the end. A cap that clips that is
+ * a cap that produces a confident, half-right answer.
+ */
+const MAX_PATCH_CHARS = 10_000;
 
 /** Hard caps so one tool call can never blow up the context. */
 export const MAX_FILE_LINES = 200;
@@ -83,6 +90,8 @@ export interface FileChange {
   status: string;
   additions: number;
   deletions: number;
+  /** The unified diff. Only filled in when one path was asked for by name. */
+  patch?: string;
 }
 
 export interface ChangeSet {
@@ -486,7 +495,12 @@ export class GithubClient {
    * search comes back empty and the honest-looking conclusion is "that feature
    * does not exist". Walking commits to their files avoids the index entirely.
    */
-  async commitChanges(repoKey: string, sha: string, limit = 40): Promise<ChangeSet> {
+  async commitChanges(
+    repoKey: string,
+    sha: string,
+    limit = 40,
+    patchFor?: string,
+  ): Promise<ChangeSet> {
     const repo = this.resolveRepo(repoKey);
     if (!/^[0-9a-f]{7,40}$/i.test(sha)) {
       throw new GithubApiError('bad_request', `"${sha}" is not a commit sha.`);
@@ -494,18 +508,24 @@ export class GithubClient {
     const data = await this.request<{ files?: RawFile[] }>(
       `/repos/${repo.owner}/${repo.name}/commits/${sha}`,
     );
-    return toChangeSet(`commit ${sha.slice(0, 7)}`, data.files, limit);
+    return toChangeSet(`commit ${sha.slice(0, 7)}`, data.files, limit, patchFor);
   }
 
   /** What differs between two refs — e.g. what is on develop but not production. */
-  async compareRefs(repoKey: string, base: string, head: string, limit = 60): Promise<ChangeSet> {
+  async compareRefs(
+    repoKey: string,
+    base: string,
+    head: string,
+    limit = 60,
+    patchFor?: string,
+  ): Promise<ChangeSet> {
     const repo = this.resolveRepo(repoKey);
     const from = this.resolveBranch(repo, base);
     const to = this.resolveBranch(repo, head);
     const data = await this.request<{ ahead_by?: number; files?: RawFile[] }>(
       `/repos/${repo.owner}/${repo.name}/compare/${encodeURIComponent(from)}...${encodeURIComponent(to)}`,
     );
-    const set = toChangeSet(`${from}...${to}`, data.files, limit);
+    const set = toChangeSet(`${from}...${to}`, data.files, limit, patchFor);
     set.aheadBy = data.ahead_by ?? 0;
     return set;
   }
@@ -516,19 +536,43 @@ interface RawFile {
   status?: string;
   additions?: number;
   deletions?: number;
+  patch?: string;
 }
 
-/** Shared shaping for both change views, with the path denylist applied. */
-function toChangeSet(label: string, raw: RawFile[] | undefined, limit: number): ChangeSet {
+/** Say so when a diff is clipped — silence there reads as "that was all of it". */
+function truncatePatch(patch: string): string {
+  if (patch.length <= MAX_PATCH_CHARS) return patch;
+  const dropped = patch.length - MAX_PATCH_CHARS;
+  return `${patch.slice(0, MAX_PATCH_CHARS)}
+[diff truncated — ${dropped} more characters. You have seen only the start of this change.]`;
+}
+
+/**
+ * Shared shaping for both change views, with the path denylist applied.
+ *
+ * `patchFor` narrows the set to one file and carries its diff. Knowing that a
+ * template grew by 121 lines is useless on its own — the model then has to read
+ * a 3,000-line file blind and usually runs out of budget first. The diff is the
+ * answer, and it is a fraction of the size.
+ */
+function toChangeSet(
+  label: string,
+  raw: RawFile[] | undefined,
+  limit: number,
+  patchFor?: string,
+): ChangeSet {
   const all = (raw ?? []).filter((f) => f.filename && !deniedPathReason(f.filename));
+  const wanted = patchFor ? all.filter((f) => f.filename === patchFor) : all;
   return {
     label,
     totalFiles: all.length,
-    files: all.slice(0, limit).map((f) => ({
+    files: wanted.slice(0, patchFor ? 1 : limit).map((f) => ({
       path: f.filename as string,
       status: f.status ?? 'modified',
       additions: f.additions ?? 0,
       deletions: f.deletions ?? 0,
+      // Diffs are file contents like any other: scrub before they leave here.
+      patch: patchFor ? truncatePatch(scrubSecrets(f.patch ?? '')) : undefined,
     })),
   };
 }
