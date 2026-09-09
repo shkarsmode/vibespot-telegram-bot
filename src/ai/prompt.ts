@@ -32,6 +32,27 @@ export interface PromptInput {
   profile: EffortProfile;
   chatKind: 'dm' | 'group';
   repliedTo?: { author: string; text: string };
+  /**
+   * Commits already fetched because the question is about recent work. Handing
+   * them over beats instructing the model to go and find them: three attempts
+   * at wording the tool policy all ended with it reaching for search_code,
+   * which indexes only the branch that trails production.
+   */
+  recentCommits?: string[];
+}
+
+/**
+ * Does this question point at recent work?
+ *
+ * Deliberately narrow. A false positive costs one cheap API call and ~500
+ * characters of prompt; a false negative sends the model back to the search
+ * index that cannot see develop.
+ */
+const RECENCY_INTENT =
+  /\b(new|newly|recent|recently|latest|today|yesterday|this week|just (?:add|added|land|landed|ship|shipped|merge|merged|deploy|deployed|did|done)|what(?:'s| is| has)? (?:changed|shipped|landed|new))\b/i;
+
+export function mentionsRecentWork(question: string): boolean {
+  return RECENCY_INTENT.test(question);
 }
 
 /** Keep the newest items that fit in a character budget, preserving order. */
@@ -81,6 +102,15 @@ export function buildMessages(input: PromptInput): ChatMessage[] {
   if (memory.length) {
     dynamicParts.push(
       `REMEMBERED FACTS (this chat asked you to keep these):\n${memory.map((m) => `- ${m}`).join('\n')}`,
+    );
+  }
+  if (input.recentCommits?.length) {
+    dynamicParts.push(
+      'RECENT COMMITS on the web client (develop, newest first). The question is about recent ' +
+        'work, so these are already fetched — do not go looking for them.\n' +
+        input.recentCommits.map((c) => `  ${c}`).join('\n') +
+        '\nTo learn what one of them did: changed_files with that sha, then again with a path ' +
+        'for its diff. Never search_code for recent work — its index cannot see develop.',
     );
   }
   const history = tailWithinBudget(input.history, HISTORY_CHAR_BUDGET);

@@ -9,7 +9,7 @@ import type { VercelClient } from '../vercel';
 import { runAgent } from '../ai/loop';
 import { DEFAULT_EFFORT, EFFORTS, modelById, modelByKey, MODELS } from '../ai/models';
 import { AiApiError, OpenRouterClient, type Usage } from '../ai/openrouter';
-import { buildMessages } from '../ai/prompt';
+import { buildMessages, mentionsRecentWork } from '../ai/prompt';
 import { buildToolSchemas, type ToolContext } from '../ai/tools';
 
 /**
@@ -131,6 +131,13 @@ export async function buildAnswer(deps: AnswerDeps, input: AnswerInput): Promise
   const profile = EFFORTS[settings.effort];
 
   const memory = await store.listMemory(input.chatId);
+  // One cheap, cached call — and it removes a whole tool round from the answer.
+  const recentCommits = mentionsRecentWork(input.question)
+    ? await deps.github
+        .recentCommits('webclient', undefined, 12)
+        .then((cs) => cs.map((c) => `${c.sha}  ${c.date.slice(0, 10)}  ${c.message}`))
+        .catch(() => [])
+    : [];
   const history = config.groupEnabled && input.chatKind === 'group'
     ? await store.getHistory(input.chatId, 12)
     : [];
@@ -154,6 +161,7 @@ export async function buildAnswer(deps: AnswerDeps, input: AnswerInput): Promise
       profile,
       chatKind: input.chatKind,
       repliedTo: input.repliedTo,
+      recentCommits,
     }),
     tools: buildToolSchemas(deps.github),
     toolCtx,
