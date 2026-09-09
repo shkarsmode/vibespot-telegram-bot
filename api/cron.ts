@@ -29,8 +29,11 @@ interface VercelResponse {
 
 /** Warn this far ahead — a week is enough to rotate without it being urgent. */
 const EXPIRY_WARNING_DAYS = 7;
-/** Roughly 100 answers at the measured average. */
-const LOW_CREDIT_USD = 2;
+/**
+ * Five dollars is about 260 answers at the measured average — a week for a
+ * five-person chat. Warning at two would have left roughly a day to react.
+ */
+const LOW_CREDIT_USD = 5;
 
 const config = loadConfig();
 configureSecretRedaction([
