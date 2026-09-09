@@ -27,6 +27,7 @@ async function main(): Promise<void> {
     config.openRouterApiKey,
     config.githubToken,
     config.redisToken,
+    config.azureToken,
   ]);
 
   const bot = createBot(config);

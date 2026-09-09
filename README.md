@@ -73,6 +73,7 @@ Copy `.env.example` to `.env`. **Never commit `.env`.**
 | `TELEGRAM_WEBHOOK_SECRET` | webhook | Secret Telegram echoes on every call. |
 | `OPENROUTER_API_KEY` | yes | <https://openrouter.ai/keys> |
 | `GITHUB_TOKEN` | yes | Fine-grained PAT, Contents + Metadata read-only. |
+| `AZURE_DEVOPS_PAT` | no | Azure DevOps PAT, Code = Read. Unlocks the `mobile` and `wiki` repos; without it they are not registered. |
 | `KV_REST_API_URL` / `KV_REST_API_TOKEN` | yes | Upstash Redis. Injected automatically by the Vercel integration; `UPSTASH_REDIS_REST_URL`/`_TOKEN` are also accepted. |
 | `VIBY_DEFAULT_MODEL` | no | Default `anthropic/claude-haiku-4.5`. |
 | `VIBY_DAILY_CALL_LIMIT` | no | Answers per chat per UTC day. Default 100. |

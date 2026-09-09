@@ -14,6 +14,10 @@ const REDACTORS: RegExp[] = [
   /\bgh[pousr]_[A-Za-z0-9]{20,}\b/g, // GitHub classic token
   /\bpk\.eyJ[A-Za-z0-9._-]{20,}\b/g, // Mapbox public token (lives in the webclient repo)
   /\bBearer\s+[A-Za-z0-9._~+/-]+=*/gi, // Authorization header value
+  // An Azure DevOps PAT is 52 unprefixed base32 characters, so it cannot be
+  // pattern-matched without false positives. The exact-value list covers the
+  // token itself; this covers the Basic header the Azure client sends.
+  /\bBasic\s+[A-Za-z0-9+/]{16,}=*/gi,
 ];
 
 /**

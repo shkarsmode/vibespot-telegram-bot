@@ -54,6 +54,20 @@ export const CODE_MAP = `REPOS YOU CAN READ
   it is not the usual one, so do not assume it.
 - landing = shkarsmode/vibespot-landing-v2. Static HTML/CSS/JS, no build step, no package.json.
   Branch: main. Homepage, city pages, legal pages, llms.txt.
+- mobile = the iOS/Android app, on AZURE DEVOPS (fwollo/Vibespot/mobile-client). React Native
+  + Expo in TypeScript — the app the team calls "native". Branches: dev (active work, your
+  default) and main. Often the reference for what a feature is SUPPOSED to do, because a flow
+  usually ships there first.
+- wiki = the team wiki, on AZURE DEVOPS (fwollo/Vibespot/wiki). Markdown only, branch main.
+  Product specs, decisions, process. Reach for this when the question is about INTENT
+  ("why", "what should it do", "was this decided") rather than implementation.
+
+CHOOSING A REPO
+- "how is it built / where is the code" -> webclient or mobile.
+- "why is it like that / what did we agree" -> wiki first.
+- "does the app do it differently?" -> compare mobile against webclient; say which is which.
+- Azure repos have NO full-text search and NO per-file diffs. Use list_files, then
+  outline_file or read_file. Do not report a missing search result as a missing feature.
 
 WEB CLIENT LAYOUT
 - src/app/core/ — the map application shell. core.component.ts is the map itself.

@@ -17,8 +17,10 @@ import {
   parseSettingsCallback,
 } from './commands/settings';
 import { buildWhoAmI } from './commands/whoami';
+import { AzureClient } from './azure';
 import { GithubClient } from './github';
 import { logger } from './logger';
+import { Sources } from './sources';
 import { Store, type Effort } from './store';
 import { splitForTelegram, stripTelegramHtml } from './telegram-md';
 import { detectTrigger } from './triggers';
@@ -88,11 +90,16 @@ async function sendHtml(
 export function createBot(config: AppConfig): Bot {
   const vercel = new VercelClient(config.vercelToken, config.vercelTeamId);
   const store = new Store(config.redisUrl, config.redisToken);
-  const github = new GithubClient(config.githubToken, store, config.repos);
+  const github = new GithubClient(config.githubToken, store, config.githubRepos);
+  // Absent without a PAT, and then its repos are simply never registered.
+  const azure = config.azureToken
+    ? new AzureClient(config.azureToken, store, config.azureRepos)
+    : undefined;
+  const sources = new Sources([github, azure]);
   const openRouter = new OpenRouterClient(config.openRouterApiKey);
   const bot = new Bot(config.telegramBotToken);
 
-  const deps: AnswerDeps = { openRouter, github, vercel, store, config };
+  const deps: AnswerDeps = { openRouter, sources, vercel, store, config };
 
   const lists: AccessLists = {
     allowedUserIds: config.allowedUserIds,

@@ -1,11 +1,7 @@
 import type { ProjectConfig } from '../config';
 import { buildDeploymentsReport } from '../commands/deployments';
-import {
-  GithubApiError,
-  GithubClient,
-  MAX_FILE_LINES,
-  PathDeniedError,
-} from '../github';
+import type { Sources } from '../sources';
+import { MAX_FILE_LINES, PathDeniedError, RepoApiError } from '../repo-read';
 import type { VercelClient } from '../vercel';
 import type { ToolSchema } from './openrouter';
 import type { EffortProfile } from './models';
@@ -20,7 +16,7 @@ import type { EffortProfile } from './models';
  */
 
 export interface ToolContext {
-  github: GithubClient;
+  sources: Sources;
   vercel: VercelClient;
   projects: ProjectConfig[];
   profile: EffortProfile;
@@ -28,8 +24,8 @@ export interface ToolContext {
   charsUsed: { value: number };
 }
 
-export function buildToolSchemas(github: GithubClient): ToolSchema[] {
-  const repos = github.listRepos();
+export function buildToolSchemas(sources: Sources): ToolSchema[] {
+  const repos = sources.listRepos();
   const repoEnum = repos.map((r) => r.key);
   const branchEnum = [...new Set(repos.flatMap((r) => r.branches))];
   const repoDescription = repos
@@ -179,7 +175,7 @@ function friendlyToolError(err: unknown): string {
   if (err instanceof PathDeniedError) {
     return `BLOCKED: ${err.message} Describe its role from the docs instead, or ask the user directly.`;
   }
-  if (err instanceof GithubApiError) {
+  if (err instanceof RepoApiError) {
     switch (err.kind) {
       case 'not_found':
         return 'ERROR: not found on that branch. Use list_files to check the exact path.';
@@ -240,7 +236,7 @@ async function runTool(
     case 'list_files': {
       const prefix = typeof args.path_prefix === 'string' ? args.path_prefix : '';
       const limit = typeof args.limit === 'number' ? args.limit : 100;
-      const { entries, total } = await ctx.github.listTree(repo, ref, prefix, limit);
+      const { entries, total } = await ctx.sources.listTree(repo, ref, prefix, limit);
       if (!entries.length) return `No files under "${prefix || '/'}" in ${repo}.`;
       const shown = entries
         .filter((e) => e.type === 'blob')
@@ -252,7 +248,7 @@ async function runTool(
 
     case 'outline_file': {
       const path = typeof args.path === 'string' ? args.path : '';
-      const out = await ctx.github.outlineFile(repo, ref, path);
+      const out = await ctx.sources.outlineFile(repo, ref, path);
       if (!out.outline.trim()) {
         return `${out.repo}@${out.branch} ${out.path} (${out.totalLines} lines) — no declarations matched; read_file a range instead.`;
       }
@@ -264,7 +260,7 @@ async function runTool(
       const start = typeof args.start_line === 'number' ? args.start_line : 1;
       const requested = typeof args.max_lines === 'number' ? args.max_lines : ctx.profile.defaultReadLines;
       const span = Math.min(requested, ctx.profile.maxReadLines, MAX_FILE_LINES);
-      const slice = await ctx.github.readFile(repo, ref, path, start, start + span - 1);
+      const slice = await ctx.sources.readFile(repo, ref, path, start, start + span - 1);
       const numbered = slice.content
         .split('\n')
         .map((line, i) => `${slice.startLine + i}| ${line}`)
@@ -285,9 +281,9 @@ async function runTool(
 
       let set;
       if (commit) {
-        set = await ctx.github.commitChanges(repo, commit, limit, wantPatch || undefined);
+        set = await ctx.sources.commitChanges(repo, commit, limit, wantPatch || undefined);
       } else if (base && head) {
-        set = await ctx.github.compareRefs(repo, base, head, limit, wantPatch || undefined);
+        set = await ctx.sources.compareRefs(repo, base, head, limit, wantPatch || undefined);
       } else {
         return 'ERROR: pass either `commit`, or both `base` and `head`.';
       }
@@ -324,7 +320,7 @@ async function runTool(
     case 'search_code': {
       const query = typeof args.query === 'string' ? args.query : '';
       const limit = typeof args.limit === 'number' ? args.limit : 8;
-      const hits = await ctx.github.searchCode(repo, query, limit);
+      const hits = await ctx.sources.searchCode(repo, query, limit);
       if (!hits.length) {
         // The model read the old wording as proof of absence and told the user
         // the feature did not exist — while it sat on develop, 27 commits ahead

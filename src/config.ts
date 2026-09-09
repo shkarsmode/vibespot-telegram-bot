@@ -20,14 +20,19 @@ export interface ProjectConfig {
   productionDomain?: string;
 }
 
-/** A GitHub repository Viby is allowed to read. */
+/** A repository Viby is allowed to read, on whichever host it lives. */
 export interface RepoConfig {
   /** Short alias the model uses in tool calls (e.g. "webclient"). */
   key: string;
   /** Human label for messages. */
   label: string;
+  /** Which API serves this repo. */
+  provider: 'github' | 'azure';
+  /** GitHub: the repository owner. Azure DevOps: the project. */
   owner: string;
   name: string;
+  /** Azure DevOps only: the organisation in dev.azure.com/<organization>. */
+  organization?: string;
   /** Branches the model may read. Anything else is rejected. */
   branches: string[];
   /** Branch used when a tool call omits one. */
@@ -59,6 +64,12 @@ export interface AppConfig {
   dailyCallLimit: number;
   /** Group triggers + message capture stay off until this is switched on. */
   groupEnabled: boolean;
+  /** Azure DevOps PAT. Empty = the Azure repos are not registered at all. */
+  azureToken: string;
+  githubRepos: RepoConfig[];
+  /** Empty unless `azureToken` is set — Viby is never told about a repo it cannot open. */
+  azureRepos: RepoConfig[];
+  /** Everything the model may read, both hosts together. */
   repos: RepoConfig[];
 }
 
@@ -132,16 +143,17 @@ const PROJECTS: ProjectConfig[] = [
 ];
 
 /**
- * Repositories Viby can read. Both live under the same owner, so a single
+ * The GitHub repositories. Both live under the same owner, so a single
  * fine-grained token with read-only Contents access covers them.
  *
  * `master-github` is the GitHub default branch and feeds the production env;
  * `develop` is where day-to-day work lands and is usually ahead of it.
  */
-const REPOS: RepoConfig[] = [
+const GITHUB_REPOS: RepoConfig[] = [
   {
     key: 'webclient',
     label: 'Web Client',
+    provider: 'github',
     owner: 'shkarsmode',
     name: 'vibespot-webclient-public',
     branches: ['develop', 'master-github'],
@@ -152,6 +164,7 @@ const REPOS: RepoConfig[] = [
   {
     key: 'landing',
     label: 'Landing',
+    provider: 'github',
     owner: 'shkarsmode',
     name: 'vibespot-landing-v2',
     branches: ['main'],
@@ -161,8 +174,49 @@ const REPOS: RepoConfig[] = [
   },
 ];
 
+/**
+ * The Azure DevOps repositories, under organisation `fwollo`, project
+ * `Vibespot`. `owner` carries the project name; the host is what differs.
+ *
+ * These are registered only when AZURE_DEVOPS_PAT is present — a missing token
+ * must leave the bot working on the GitHub repos rather than taking it down.
+ */
+const AZURE_REPOS: RepoConfig[] = [
+  {
+    key: 'mobile',
+    label: 'Mobile Client',
+    provider: 'azure',
+    organization: 'fwollo',
+    owner: 'Vibespot',
+    name: 'mobile-client',
+    branches: ['main', 'dev'],
+    defaultBranch: 'dev',
+    summary:
+      'The iOS/Android app the team calls "native" — React Native + Expo in TypeScript, so its logic is readable and often the reference for what the web client should do.',
+  },
+  {
+    key: 'wiki',
+    label: 'Wiki',
+    provider: 'azure',
+    organization: 'fwollo',
+    owner: 'Vibespot',
+    name: 'wiki',
+    branches: ['main'],
+    defaultBranch: 'main',
+    summary:
+      'The team wiki: Markdown pages of product specs, decisions and process. Prefer this over the code when the question is about intent rather than implementation.',
+  },
+];
+
 export function loadConfig(): AppConfig {
+  const azureToken = process.env.AZURE_DEVOPS_PAT?.trim() || '';
+  const azureRepos = azureToken ? AZURE_REPOS : [];
   return {
+    azureToken,
+    githubRepos: GITHUB_REPOS,
+    azureRepos,
+    repos: [...GITHUB_REPOS, ...azureRepos],
+
     telegramBotToken: required('TELEGRAM_BOT_TOKEN'),
     vercelToken: required('VERCEL_TOKEN'),
     vercelTeamId: required('VERCEL_TEAM_ID'),
@@ -180,7 +234,6 @@ export function loadConfig(): AppConfig {
     allowedChatIds: parseIdList(process.env.VIBY_ALLOWED_CHAT_IDS, 'VIBY_ALLOWED_CHAT_IDS'),
     dailyCallLimit: parsePositiveInt(process.env.VIBY_DAILY_CALL_LIMIT, 100, 'VIBY_DAILY_CALL_LIMIT'),
     groupEnabled: parseBool(process.env.VIBY_GROUP_ENABLED, false),
-    repos: REPOS,
   };
 }
 

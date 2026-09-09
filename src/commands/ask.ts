@@ -1,11 +1,11 @@
 import type { AppConfig } from '../config';
 import { escapeHtml } from '../format';
-import { GithubClient } from '../github';
 import { logger } from '../logger';
-import { scrubSecrets } from '../github';
+import { scrubSecrets } from '../repo-read';
 import { Store, type Effort } from '../store';
 import { renderTelegramHtml } from '../telegram-md';
 import type { VercelClient } from '../vercel';
+import type { Sources } from '../sources';
 import { runAgent } from '../ai/loop';
 import { DEFAULT_EFFORT, EFFORTS, modelById, modelByKey, MODELS } from '../ai/models';
 import { AiApiError, OpenRouterClient, type Usage } from '../ai/openrouter';
@@ -30,7 +30,7 @@ export class DailyLimitError extends Error {
 
 export interface AnswerDeps {
   openRouter: OpenRouterClient;
-  github: GithubClient;
+  sources: Sources;
   vercel: VercelClient;
   store: Store;
   config: AppConfig;
@@ -133,7 +133,7 @@ export async function buildAnswer(deps: AnswerDeps, input: AnswerInput): Promise
   const memory = await store.listMemory(input.chatId);
   // One cheap, cached call — and it removes a whole tool round from the answer.
   const recentCommits = mentionsRecentWork(input.question)
-    ? await deps.github
+    ? await deps.sources
         .recentCommits('webclient', undefined, 12)
         .then((cs) => cs.map((c) => `${c.sha}  ${c.date.slice(0, 10)}  ${c.message}`))
         .catch(() => [])
@@ -143,7 +143,7 @@ export async function buildAnswer(deps: AnswerDeps, input: AnswerInput): Promise
     : [];
 
   const toolCtx: ToolContext = {
-    github: deps.github,
+    sources: deps.sources,
     vercel: deps.vercel,
     projects: config.projects,
     profile,
@@ -163,7 +163,7 @@ export async function buildAnswer(deps: AnswerDeps, input: AnswerInput): Promise
       repliedTo: input.repliedTo,
       recentCommits,
     }),
-    tools: buildToolSchemas(deps.github),
+    tools: buildToolSchemas(deps.sources),
     toolCtx,
     deadlineMs: Date.now() + TIME_BUDGET_MS,
     onProgress: input.onProgress,

@@ -35,6 +35,7 @@ configureSecretRedaction([
   config.openRouterApiKey,
   config.githubToken,
   config.redisToken,
+  config.azureToken,
 ]);
 
 // Reused across warm invocations; re-created on a cold start.
