@@ -87,7 +87,7 @@ Two lists, checked by `src/access.ts` before any handler runs:
 | | DM | Listed group | Anywhere else |
 | --- | --- | --- | --- |
 | **In `ALLOWED_USER_IDS`** | full access | full access | silence |
-| **Anyone else** | refused, one line | may ask questions and run `/deployments`; cannot change model, effort or memory | silence |
+| **Anyone else** | refused, one line | may ask, run `/deployments`, and retune the chat with `/model` / `/effort` / `/usage`; cannot `/forget` | silence |
 
 A group is served only when `VIBY_GROUP_ENABLED=true` **and** its id is listed —
 the phase gate is checked first, so adding an id while the flag is off changes
@@ -96,6 +96,11 @@ refusal, so the bot can never spam a chat it was added to by mistake.
 (A basic group promoted to a supergroup gets a new id and falls silent until the
 new one is listed.) Both lists empty = fully open;
 that is the local-development default and must not ship.
+
+`/model` and `/effort` are stored **per chat**, not per person, so a tap in a
+group changes the model for everyone in it — deliberately, so the room can dial
+cost up for a hard question and back down after. Every change is logged with the
+user id that made it. `/forget` stays maintainer-only: it destroys shared state.
 
 `/whoami` is the one command that runs *before* the gate: it echoes the caller's
 own user and chat id back to them, which is the only way to read a Telegram

@@ -187,7 +187,6 @@ export function createBot(config: AppConfig): Bot {
   });
 
   bot.command('model', async (ctx) => {
-    if (!(await requireMaintainer(ctx))) return;
     const settings = await store.getSettings(ctx.chat.id, {
       model: config.defaultModel,
       effort: DEFAULT_EFFORT,
@@ -197,7 +196,6 @@ export function createBot(config: AppConfig): Bot {
   });
 
   bot.command('effort', async (ctx) => {
-    if (!(await requireMaintainer(ctx))) return;
     const settings = await store.getSettings(ctx.chat.id, {
       model: config.defaultModel,
       effort: DEFAULT_EFFORT,
@@ -262,11 +260,6 @@ export function createBot(config: AppConfig): Bot {
       await ctx.answerCallbackQuery();
       return;
     }
-    if (!isOwner(ctx)) {
-      await ctx.answerCallbackQuery({ text: 'Only maintainers can change this.', show_alert: true });
-      return;
-    }
-
     let toast: string;
     if (parsed.kind === 'model') {
       const model = modelByKey(parsed.key);
@@ -280,6 +273,9 @@ export function createBot(config: AppConfig): Bot {
       await store.setSetting(ctx.chat.id, 'effort', parsed.key as Effort);
       toast = `Effort: ${parsed.key}`;
     }
+    logger.info(
+      `Setting changed chat=${ctx.chat.id} by=${ctx.from?.id} ${parsed.kind}=${parsed.key}`,
+    );
 
     const settings = await store.getSettings(ctx.chat.id, {
       model: config.defaultModel,
