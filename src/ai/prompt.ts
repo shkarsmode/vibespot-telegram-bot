@@ -39,6 +39,8 @@ export interface PromptInput {
    * which indexes only the branch that trails production.
    */
   recentCommits?: string[];
+  /** Which repo those commits came from — the label has to be true. */
+  recentCommitsRepo?: string;
 }
 
 /**
@@ -106,11 +108,12 @@ export function buildMessages(input: PromptInput): ChatMessage[] {
   }
   if (input.recentCommits?.length) {
     dynamicParts.push(
-      'RECENT COMMITS on the web client (develop, newest first). The question is about recent ' +
-        'work, so these are already fetched — do not go looking for them.\n' +
+      `RECENT COMMITS in ${input.recentCommitsRepo ?? 'webclient'} (default branch, newest ` +
+        'first). The question is about recent work, so these are already fetched — do not go ' +
+        'looking for them, and do not assume they cover any other repo.\n' +
         input.recentCommits.map((c) => `  ${c}`).join('\n') +
         '\nTo learn what one of them did: changed_files with that sha, then again with a path ' +
-        'for its diff. Never search_code for recent work — its index cannot see develop.',
+        'for its diff. Never search_code for recent work — its index cannot see these branches.',
     );
   }
   const history = tailWithinBudget(input.history, HISTORY_CHAR_BUDGET);

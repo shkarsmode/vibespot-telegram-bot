@@ -62,6 +62,21 @@ export function parseRememberIntent(text: string): string | null {
   return fact && fact.length > 2 ? fact : null;
 }
 
+/** Words that mean the question is about the phone app rather than the web client. */
+const MOBILE_HINT = /\b(mobile|native|ios|iphone|android|expo|react[\s-]?native|the app)\b/i;
+
+/**
+ * Which repo's commits to pre-fetch for a question about recent work, or null
+ * when the question is not about recent work at all. Handing the model the
+ * wrong repo's history is worse than handing it none: it would be reading web
+ * client commits while being asked what changed in the phone app.
+ */
+export function pickRecentRepo(question: string, available: string[]): string | null {
+  if (!mentionsRecentWork(question)) return null;
+  if (MOBILE_HINT.test(question) && available.includes('mobile')) return 'mobile';
+  return available.includes('webclient') ? 'webclient' : null;
+}
+
 /** Short, token-free explanation for a failed model call. */
 export function friendlyAiError(err: unknown): string {
   if (err instanceof DailyLimitError) {
@@ -132,9 +147,10 @@ export async function buildAnswer(deps: AnswerDeps, input: AnswerInput): Promise
 
   const memory = await store.listMemory(input.chatId);
   // One cheap, cached call — and it removes a whole tool round from the answer.
-  const recentCommits = mentionsRecentWork(input.question)
+  const recentRepo = pickRecentRepo(input.question, deps.sources.listRepos().map((r) => r.key));
+  const recentCommits = recentRepo
     ? await deps.sources
-        .recentCommits('webclient', undefined, 12)
+        .recentCommits(recentRepo, undefined, 12)
         .then((cs) => cs.map((c) => `${c.sha}  ${c.date.slice(0, 10)}  ${c.message}`))
         .catch(() => [])
     : [];
@@ -162,6 +178,7 @@ export async function buildAnswer(deps: AnswerDeps, input: AnswerInput): Promise
       chatKind: input.chatKind,
       repliedTo: input.repliedTo,
       recentCommits,
+      recentCommitsRepo: recentRepo ?? undefined,
     }),
     tools: buildToolSchemas(deps.sources),
     toolCtx,
