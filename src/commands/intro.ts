@@ -60,6 +60,7 @@ export function buildHelp(botUsername: string): string {
     '/memory — list what I remember',
     '/forget — drop a fact (<code>/forget 2</code> or <code>/forget all</code>)',
     '/usage — today’s answers, tokens and cost',
+    '/whoami — your Telegram ids (used to build the allowlist)',
     '/help — this message',
   ].join('\n');
 }

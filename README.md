@@ -76,9 +76,26 @@ Copy `.env.example` to `.env`. **Never commit `.env`.**
 | `KV_REST_API_URL` / `KV_REST_API_TOKEN` | yes | Upstash Redis. Injected automatically by the Vercel integration; `UPSTASH_REDIS_REST_URL`/`_TOKEN` are also accepted. |
 | `VIBY_DEFAULT_MODEL` | no | Default `anthropic/claude-haiku-4.5`. |
 | `VIBY_DAILY_CALL_LIMIT` | no | Answers per chat per UTC day. Default 100. |
-| `ALLOWED_USER_IDS` | no | Numeric Telegram user ids. Empty = everyone. |
-| `VIBY_ALLOWED_CHAT_IDS` | no | Chat ids allowed to use the AI (group ids are negative). |
+| `ALLOWED_USER_IDS` | **yes in prod** | Numeric ids allowed to DM the bot, and the only maintainers. Empty = **everyone**. |
+| `VIBY_ALLOWED_CHAT_IDS` | **yes in prod** | Group chat ids the bot serves (negative). Empty = no groups, once `ALLOWED_USER_IDS` is set. |
 | `VIBY_GROUP_ENABLED` | no | **The phase gate.** `false` = completely silent in groups. |
+
+## Who can use it
+
+Two lists, checked by `src/access.ts` before any handler runs:
+
+| | DM | Listed group | Anywhere else |
+| --- | --- | --- | --- |
+| **In `ALLOWED_USER_IDS`** | full access | full access | silence |
+| **Anyone else** | refused, one line | may ask questions and run `/deployments`; cannot change model, effort or memory | silence |
+
+An unlisted group gets **no reply at all** — not even a refusal — so the bot can
+never spam a chat it was added to by mistake. Both lists empty = fully open;
+that is the local-development default and must not ship.
+
+`/whoami` is the one command that runs *before* the gate: it echoes the caller's
+own user and chat id back to them, which is the only way to read a Telegram
+numeric id and therefore the only way to bootstrap the lists.
 
 ## Run
 
@@ -103,7 +120,7 @@ Groups stay **off** until `VIBY_GROUP_ENABLED=true`. Before flipping it:
 1. BotFather → `/setprivacy` → **Disable** (needed to read chat context).
 2. **Remove and re-add** the bot to the group — Telegram requires this for the
    privacy change to take effect.
-3. Set `VIBY_ALLOWED_CHAT_IDS` to the group id, then redeploy.
+3. Run `/whoami` in the group, put the (negative) id in `VIBY_ALLOWED_CHAT_IDS`, redeploy.
 
 Then Viby answers to `Viby …`, an @mention, a reply to itself, or `/ask`, and
 introduces itself once when added.

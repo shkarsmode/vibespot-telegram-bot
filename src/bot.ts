@@ -1,4 +1,5 @@
 import { Bot, Context, GrammyError, HttpError } from 'grammy';
+import { decideAccess, isGroupChat, isMaintainer, type AccessLists } from './access';
 import type { AppConfig } from './config';
 import { buildDeploymentsReport } from './commands/deployments';
 import {
@@ -15,6 +16,7 @@ import {
   buildUsageReport,
   parseSettingsCallback,
 } from './commands/settings';
+import { buildWhoAmI } from './commands/whoami';
 import { GithubClient } from './github';
 import { logger } from './logger';
 import { Store, type Effort } from './store';
@@ -34,6 +36,7 @@ export const BOT_COMMANDS = [
   { command: 'memory', description: 'List what Viby remembers' },
   { command: 'forget', description: 'Drop a remembered fact' },
   { command: 'usage', description: "Today's answers, tokens and cost" },
+  { command: 'whoami', description: 'Show your Telegram ids (for the allowlist)' },
   { command: 'help', description: 'Show help' },
 ];
 
@@ -91,27 +94,59 @@ export function createBot(config: AppConfig): Bot {
 
   const deps: AnswerDeps = { openRouter, github, vercel, store, config };
 
-  const isGroup = (ctx: Context): boolean =>
-    ctx.chat?.type === 'group' || ctx.chat?.type === 'supergroup';
-
-  /** Allowlist membership. Empty list = everyone. */
-  const isPrivileged = (ctx: Context): boolean => {
-    if (config.allowedUserIds.length === 0) return true;
-    const id = ctx.from?.id;
-    return id !== undefined && config.allowedUserIds.includes(id);
+  const lists: AccessLists = {
+    allowedUserIds: config.allowedUserIds,
+    allowedChatIds: config.allowedChatIds,
   };
 
+  const identify = (ctx: Context) => ({
+    chatType: ctx.chat?.type ?? 'private',
+    chatId: ctx.chat?.id ?? 0,
+    userId: ctx.from?.id,
+  });
+
+  const isGroup = (ctx: Context): boolean => isGroupChat(ctx.chat?.type ?? '');
+  const isOwner = (ctx: Context): boolean => isMaintainer(identify(ctx), lists);
+
   /**
-   * Gate for maintainer-only actions. In a private chat a stranger is told why
-   * nothing happened; in a group we stay quiet rather than spamming refusals.
+   * Gate for the few actions that change how Viby behaves — model, effort,
+   * memory. Anyone in an allowed chat may ask questions; only a maintainer may
+   * retune it. In a group we stay quiet rather than spamming refusals.
    */
-  const requirePrivileged = async (ctx: Context): Promise<boolean> => {
-    if (isPrivileged(ctx)) return true;
-    if (!isGroup(ctx)) await ctx.reply('⛔ You are not authorised to use this bot.');
+  const requireMaintainer = async (ctx: Context): Promise<boolean> => {
+    if (isOwner(ctx)) return true;
+    if (!isGroup(ctx)) await ctx.reply('⛔ Only maintainers can change this.');
     return false;
   };
 
-  // ---- 1. History capture (group context; inert until groups are enabled) --
+  // ---- 0. /whoami runs BEFORE the gate, so a locked-down bot can still be
+  //         handed a new group. It echoes only the caller's own ids back.
+  bot.command('whoami', async (ctx) => {
+    const identity = identify(ctx);
+    await ctx.reply(
+      buildWhoAmI({
+        ...identity,
+        displayName: ctx.from?.first_name ?? ctx.from?.username ?? 'you',
+        isMaintainer: isMaintainer(identity, lists),
+        chatAllowed: decideAccess(identity, lists) === 'allow',
+      }),
+      HTML_OPTS,
+    );
+  });
+
+  // ---- 1. The access gate: who may talk to this bot at all -----------------
+  bot.use(async (ctx, next) => {
+    if (!ctx.chat) return;
+    const decision = decideAccess(identify(ctx), lists);
+    if (decision === 'allow') return next();
+    if (decision === 'refuse') {
+      await ctx.reply('⛔ This bot is private to the Vibespot team.');
+    }
+    // 'ignore' — an unserved group or a channel: not a word.
+  });
+
+  // ---- 2. History capture (group context; inert until groups are enabled) --
+  //         After the gate, so nothing is stored for a chat we do not serve.
   bot.use(async (ctx, next) => {
     const text = ctx.message?.text;
     if (config.groupEnabled && isGroup(ctx) && text && ctx.chat) {
@@ -120,13 +155,6 @@ export function createBot(config: AppConfig): Bot {
     }
     // Never short-circuit: this is an observer, not a gate.
     return next();
-  });
-
-  // ---- 2. Private-chat allowlist ------------------------------------------
-  bot.use(async (ctx, next) => {
-    // In groups everyone may ask; per-action checks handle the rest.
-    if (isGroup(ctx) || isPrivileged(ctx)) return next();
-    if (ctx.chat) await ctx.reply('⛔ You are not authorised to use this bot.');
   });
 
   // ---- 3. Commands ---------------------------------------------------------
@@ -139,7 +167,6 @@ export function createBot(config: AppConfig): Bot {
   });
 
   bot.command('deployments', async (ctx) => {
-    if (!(await requirePrivileged(ctx))) return;
     const loading = await ctx.reply('⏳ Fetching latest deployments…');
     try {
       const report = await buildDeploymentsReport(vercel, config.projects);
@@ -159,7 +186,7 @@ export function createBot(config: AppConfig): Bot {
   });
 
   bot.command('model', async (ctx) => {
-    if (!(await requirePrivileged(ctx))) return;
+    if (!(await requireMaintainer(ctx))) return;
     const settings = await store.getSettings(ctx.chat.id, {
       model: config.defaultModel,
       effort: DEFAULT_EFFORT,
@@ -169,7 +196,7 @@ export function createBot(config: AppConfig): Bot {
   });
 
   bot.command('effort', async (ctx) => {
-    if (!(await requirePrivileged(ctx))) return;
+    if (!(await requireMaintainer(ctx))) return;
     const settings = await store.getSettings(ctx.chat.id, {
       model: config.defaultModel,
       effort: DEFAULT_EFFORT,
@@ -202,7 +229,7 @@ export function createBot(config: AppConfig): Bot {
   });
 
   bot.command('forget', async (ctx) => {
-    if (!(await requirePrivileged(ctx))) return;
+    if (!(await requireMaintainer(ctx))) return;
     const argument = (ctx.match ?? '').toString().trim();
     if (argument.toLowerCase() === 'all') {
       await store.clearMemory(ctx.chat.id);
@@ -234,7 +261,7 @@ export function createBot(config: AppConfig): Bot {
       await ctx.answerCallbackQuery();
       return;
     }
-    if (!isPrivileged(ctx)) {
+    if (!isOwner(ctx)) {
       await ctx.answerCallbackQuery({ text: 'Only maintainers can change this.', show_alert: true });
       return;
     }
