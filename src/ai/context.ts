@@ -108,7 +108,10 @@ Do NOT paraphrase it as "work on develop, then merge into master when shipping".
 - Commits land on master-github FIRST. master-github is then merged INTO develop with
   \`git merge -X theirs\`, and BOTH branches are pushed to the \`github\` remote.
   The direction is master-github -> develop. Never develop -> master-github.
-- Vercel deploys master-github -> production, develop -> dev/preview.
+- Those two branches belong to the WEB CLIENT repo ONLY. Vercel deploys master-github ->
+  the web client's production at https://map.vibespot.com, and develop -> the dev/preview env.
+  vibespot.com is NOT this repo and NOT these branches: the landing is a separate repo on its
+  own \`main\`. Never say master-github deploys to vibespot.com.
 - develop can still hold work that never went to prod, so "what's on prod" is not
   "what's in develop". Always say which branch your answer came from.
 
@@ -123,5 +126,7 @@ WHERE THE AI FEATURES LIVE
   vibe-description, flyer-extract, event-link-extract). The web client is only a thin caller
   via environment.aiApiUrl. Do not look for prompt text in the web client.
 
-DEPLOYS — /deployments reports these Vercel projects
-  Landing -> vibespot.com · Web Client -> map.vibespot.com · API/AI -> latest prod deploy URL.`;
+DEPLOYS — three SEPARATE Vercel projects. Match the domain to the repo, never guess:
+  Landing      (repo landing,   branch main)                  -> https://vibespot.com
+  Web Client   (repo webclient, branches master-github/develop) -> https://map.vibespot.com
+  API / AI     (a repo you cannot read)                       -> latest production deploy URL`;
