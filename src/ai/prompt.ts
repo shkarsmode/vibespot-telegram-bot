@@ -33,6 +33,16 @@ export interface PromptInput {
   chatKind: 'dm' | 'group';
   repliedTo?: { author: string; text: string };
   /**
+   * The model actually serving this answer.
+   *
+   * A model cannot read its own version off itself. Asked in the team chat what
+   * it runs on, Viby saw "haiku" in its own footer and answered "Claude 3.5
+   * Haiku" — a plausible guess, a wrong one, and one a colleague had no way to
+   * catch. The truth is known here, so it is handed over rather than inferred.
+   */
+  modelLabel?: string;
+  modelId?: string;
+  /**
    * Commits already fetched because the question is about recent work. Handing
    * them over beats instructing the model to go and find them: three attempts
    * at wording the tool policy all ended with it reaching for search_code,
@@ -100,6 +110,15 @@ export function buildMessages(input: PromptInput): ChatMessage[] {
   const messages: ChatMessage[] = [{ role: 'system', content: staticBlock }];
 
   const dynamicParts: string[] = [];
+  if (input.modelLabel && input.modelId) {
+    dynamicParts.push(
+      'WHAT YOU ARE RUNNING ON RIGHT NOW — quote these facts exactly if asked, and never ' +
+        'infer your own version from the short label in your footer:\n' +
+        `- Model: ${input.modelLabel} (${input.modelId}), reached through OpenRouter.\n` +
+        `- Effort: ${input.profile.key} — up to ${input.profile.maxIterations} tool rounds this answer.\n` +
+        '- Anyone in this chat can change both with /model and /effort.',
+    );
+  }
   const memory = tailWithinBudget(input.memory, MEMORY_CHAR_BUDGET);
   if (memory.length) {
     dynamicParts.push(

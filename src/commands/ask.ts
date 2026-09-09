@@ -179,6 +179,8 @@ export async function buildAnswer(deps: AnswerDeps, input: AnswerInput): Promise
       repliedTo: input.repliedTo,
       recentCommits,
       recentCommitsRepo: recentRepo ?? undefined,
+      modelLabel: model.label,
+      modelId: model.id,
     }),
     tools: buildToolSchemas(deps.sources),
     toolCtx,
