@@ -52,31 +52,45 @@ function daysUntil(isoDate: string): number | null {
   return Math.ceil((then - Date.now()) / 86_400_000);
 }
 
-async function collectWarnings(): Promise<string[]> {
-  const warnings: string[] = [];
+/**
+ * Warnings, split by who actually needs them.
+ *
+ * The token expiring changes what the bot can answer, so the whole team should
+ * see it coming rather than discover it as "Viby has gone stupid about the
+ * app". The credit balance is a number only the account holder can act on, and
+ * a running total of spend does not belong in a team chat.
+ */
+interface Warnings {
+  team: string[];
+  maintainer: string[];
+}
+
+async function collectWarnings(): Promise<Warnings> {
+  const team: string[] = [];
+  const maintainer: string[] = [];
 
   if (config.azureToken && config.azurePatExpires) {
     const left = daysUntil(config.azurePatExpires);
     if (left !== null && left <= EXPIRY_WARNING_DAYS) {
-      warnings.push(
+      team.push(
         left <= 0
-          ? `🔑 <b>The Azure DevOps token has expired</b> (${config.azurePatExpires}). I can no longer read the mobile client or the wiki.`
-          : `🔑 <b>The Azure DevOps token expires in ${left} day${left === 1 ? '' : 's'}</b> (${config.azurePatExpires}). After that I lose the mobile client and the wiki — the GitHub repos keep working.`,
+          ? `🔑 <b>My Azure DevOps access has expired</b> (${config.azurePatExpires}). I can no longer read the <b>mobile client</b> or the <b>wiki</b> — ask me about those and I will come up empty. The GitHub repos are unaffected.`
+          : `🔑 <b>My Azure DevOps access expires in ${left} day${left === 1 ? '' : 's'}</b>, on ${config.azurePatExpires}. After that I lose the <b>mobile client</b> and the <b>wiki</b>; the GitHub repos keep working.`,
       );
-      warnings.push(
-        'Rotate it at <code>dev.azure.com/fwollo/_usersSettings/tokens</code> — scope <b>Code = Read</b> only — then replace <code>AZURE_DEVOPS_PAT</code> in the Vercel project and redeploy.',
+      team.push(
+        'Whoever holds the token: rotate it at <code>dev.azure.com/fwollo/_usersSettings/tokens</code> with scope <b>Code = Read</b> only, then replace <code>AZURE_DEVOPS_PAT</code> in the Vercel project and redeploy.',
       );
     }
   }
 
   const credit = await new OpenRouterClient(config.openRouterApiKey).remainingCredit();
   if (credit !== null && credit < LOW_CREDIT_USD) {
-    warnings.push(
+    maintainer.push(
       `💳 <b>OpenRouter credit is down to $${credit.toFixed(2)}</b> — roughly ${Math.max(0, Math.floor(credit / 0.019))} more answers. Top up at openrouter.ai/credits before it runs out mid-conversation.`,
     );
   }
 
-  return warnings;
+  return { team, maintainer };
 }
 
 export default async function handler(req: VercelRequest, res: VercelResponse): Promise<void> {
@@ -88,27 +102,51 @@ export default async function handler(req: VercelRequest, res: VercelResponse): 
   }
 
   try {
-    const warnings = await collectWarnings();
-    if (!warnings.length) {
+    const { team, maintainer } = await collectWarnings();
+    if (!team.length && !maintainer.length) {
       res.status(200).send('ok: nothing to report');
       return;
     }
 
-    const maintainer = config.allowedUserIds[0];
-    if (maintainer === undefined) {
-      logger.warn('Cron has warnings but ALLOWED_USER_IDS is empty, so there is nobody to tell');
-      res.status(200).send('ok: no maintainer configured');
+    const owner = config.allowedUserIds[0];
+    // Team warnings go to every group Viby serves; with no group configured
+    // they fall back to the maintainer rather than going nowhere.
+    const teamChats =
+      config.groupEnabled && config.allowedChatIds.length
+        ? config.allowedChatIds
+        : owner !== undefined
+          ? [owner]
+          : [];
+
+    const deliveries: { chatId: number; body: string }[] = [];
+    if (team.length) {
+      for (const chatId of teamChats) deliveries.push({ chatId, body: team.join('\n\n') });
+    }
+    if (maintainer.length && owner !== undefined) {
+      deliveries.push({ chatId: owner, body: maintainer.join('\n\n') });
+    }
+
+    if (!deliveries.length) {
+      logger.warn('Cron has warnings but no chat is configured to receive them');
+      res.status(200).send('ok: nobody to tell');
       return;
     }
 
     const bot = new Bot(config.telegramBotToken);
     await bot.init();
-    await bot.api.sendMessage(maintainer, warnings.join('\n\n'), {
-      parse_mode: 'HTML',
-      link_preview_options: { is_disabled: true },
-    });
-    logger.info(`Cron sent ${warnings.length} warning line(s)`);
-    res.status(200).send('ok: warned');
+    for (const { chatId, body } of deliveries) {
+      try {
+        await bot.api.sendMessage(chatId, body, {
+          parse_mode: 'HTML',
+          link_preview_options: { is_disabled: true },
+        });
+      } catch (err) {
+        // One unreachable chat must not silence the others.
+        logger.error(`Cron could not reach chat ${chatId}`, err);
+      }
+    }
+    logger.info(`Cron delivered ${deliveries.length} message(s)`);
+    res.status(200).send(`ok: warned (${deliveries.length})`);
   } catch (err) {
     logger.error('Cron check failed', err);
     // Still 200: a failed check must not make Vercel retry-storm the endpoint.
